@@ -1,0 +1,5 @@
+{
+  "name": "PCM Industrial",
+  "description": "A comprehensive maintenance management application for the plastic transformation industry, inspired by Tractian. This app provides dashboards, maintenance call management, equipment tracking, and AI-powered preventive suggestions.",
+  "requestFramePermissions": []
+}
