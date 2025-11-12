@@ -1,4 +1,4 @@
-import { Plant, User, Role, Equipment, EquipmentType, MaintenanceCall, MaintenanceStatus, MaintenancePriority, Team, CallSource, AlertRule, AlertMetric, AlertCondition, Company, MaintenanceCallEvent } from './types';
+import { Plant, User, Role, Equipment, EquipmentType, MaintenanceCall, MaintenanceStatus, MaintenancePriority, Team, CallSource, AlertRule, AlertMetric, AlertCondition, Company, MaintenanceCallEvent, Permissions } from './types';
 
 export const MOCK_COMPANIES: Company[] = [
     { id: 1, name: 'Plásticos do Brasil S.A.', region: 'Sudeste', administrator: 'Carlos Pereira', phone: '(11) 98765-4321' },
@@ -160,8 +160,33 @@ export const MOCK_MAINTENANCE_CALLS: MaintenanceCall[] = [
 ];
 
 export const MOCK_ALERT_RULES: AlertRule[] = [
-    { id: 1, equipmentId: 1, metric: AlertMetric.TEMPERATURE, condition: AlertCondition.GREATER_THAN, threshold: 240, description: 'Abrir chamado crítico se temp. do canhão da Extrusora Alpha > 240°C' },
-    { id: 2, equipmentId: 1, metric: AlertMetric.VIBRATION, condition: AlertCondition.GREATER_THAN, threshold: 10, description: 'Abrir chamado médio se vibração da Extrusora Alpha > 10 mm/s' },
-    { id: 3, equipmentId: 3, metric: AlertMetric.PRESSURE, condition: AlertCondition.LESS_THAN, threshold: 5, description: 'Alerta se pressão de tinta da Impressora Gamma < 5 bar' },
-    { id: 4, equipmentId: 5, metric: AlertMetric.VIBRATION, condition: AlertCondition.GREATER_THAN, threshold: 8, description: 'Abrir chamado médio se vibração da Extrusora Epsilon > 8 mm/s' },
+    { id: 1, equipmentId: 1, metric: AlertMetric.TEMPERATURE, condition: AlertCondition.GREATER_THAN, threshold: 240, description: 'Abrir chamado crítico se temp. do canhão da Extrusora Alpha > 240°C', isActive: true },
+    { id: 2, equipmentId: 1, metric: AlertMetric.VIBRATION, condition: AlertCondition.GREATER_THAN, threshold: 10, description: 'Abrir chamado médio se vibração da Extrusora Alpha > 10 mm/s', isActive: true },
+    { id: 3, equipmentId: 3, metric: AlertMetric.PRESSURE, condition: AlertCondition.LESS_THAN, threshold: 5, description: 'Alerta se pressão de tinta da Impressora Gamma < 5 bar', isActive: true },
+    { id: 4, equipmentId: 5, metric: AlertMetric.VIBRATION, condition: AlertCondition.GREATER_THAN, threshold: 8, description: 'Abrir chamado médio se vibração da Extrusora Epsilon > 8 mm/s', isActive: true },
 ];
+
+export const DEFAULT_PAGE_PERMISSIONS: Permissions = {
+    [Role.SYSTEM_ADMINISTRATOR]: {
+        'analysis': true, 'calls': true, 'equipment': true, 'users': true, 'settings': true, 'ai': true,
+        'team-view': true, 'alerts': true, 'database': true, 'messaging': true, 'companies': true,
+        'schema': true, 'teams': true, 'roles': true, 'reports': true, 'access-control': true,
+    },
+    [Role.ADMINISTRATOR]: {
+        'analysis': true, 'calls': true, 'equipment': true, 'users': true, 'ai': true,
+        'team-view': true, 'alerts': true, 'teams': true, 'roles': true, 'reports': true,
+    },
+    [Role.ADMIN_PLANTA]: {
+        'analysis': true, 'calls': true, 'equipment': true, 'users': true, 'ai': true,
+        'team-view': true, 'alerts': true, 'teams': true, 'roles': true, 'reports': true,
+    },
+    [Role.TECNICO_PCM]: {
+        'calls': true, 'equipment': true, 'ai': true, 'team-view': true,
+    },
+    [Role.OPERADOR]: {
+        'calls': true, 'equipment': true,
+    },
+    [Role.VISUALIZADOR]: {
+        'analysis': true, 'calls': true, 'equipment': true,
+    },
+};

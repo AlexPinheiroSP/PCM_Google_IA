@@ -13,9 +13,12 @@ import AnalysisPage from '../../pages/AnalysisPage';
 import MessagingSettingsPage from '../../pages/MessagingSettingsPage';
 import CompaniesPage from '../../pages/CompaniesPage';
 import SchemaViewerPage from '../../pages/SchemaViewerPage';
+import TeamsPage from '../../pages/TeamsPage';
+import RolesPage from '../../pages/RolesPage';
+import ReportsPage from '../../pages/ReportsPage';
+import AccessControlPage from '../../pages/AccessControlPage';
+import { Page } from '../../types';
 
-
-type Page = 'analysis' | 'calls' | 'equipment' | 'users' | 'settings' | 'ai' | 'team-view' | 'alerts' | 'database' | 'messaging' | 'companies' | 'schema';
 
 const AppLayout: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('analysis');
@@ -30,8 +33,16 @@ const AppLayout: React.FC = () => {
         return <EquipmentPage />;
       case 'users':
         return <UsersPage />;
+      case 'teams':
+        return <TeamsPage />;
+      case 'roles':
+        return <RolesPage />;
+      case 'reports':
+        return <ReportsPage />;
+      case 'access-control':
+        return <AccessControlPage />;
       case 'settings':
-        return <SettingsPage />;
+        return <SettingsPage setCurrentPage={setCurrentPage} />;
       case 'messaging':
         return <MessagingSettingsPage />;
       case 'ai':

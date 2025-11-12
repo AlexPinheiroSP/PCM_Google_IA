@@ -1,10 +1,11 @@
 
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import LoginPage from './pages/LoginPage';
 import AppLayout from './components/layout/AppLayout';
-import { User, Notification, MaintenanceCall, Role, Company, CompanyContextType } from './types';
-import { MOCK_USERS, MOCK_MAINTENANCE_CALLS, MOCK_COMPANIES } from './constants';
+import { User, Notification, MaintenanceCall, Role, Company, CompanyContextType, Permissions, Page } from './types';
+import { MOCK_USERS, MOCK_MAINTENANCE_CALLS, MOCK_COMPANIES, DEFAULT_PAGE_PERMISSIONS } from './constants';
 
 // Create a context to provide auth info to the entire app
 export const AuthContext = React.createContext<{
@@ -32,10 +33,12 @@ export const NotificationContext = React.createContext<{
 export const DataContext = React.createContext<{
   calls: MaintenanceCall[];
   updateCall: (updatedCall: MaintenanceCall) => void;
+  addCall: (newCall: Omit<MaintenanceCall, 'id'>) => void;
   isLoading: boolean;
 }>({
   calls: [],
   updateCall: () => {},
+  addCall: () => {},
   isLoading: true,
 });
 
@@ -45,12 +48,22 @@ export const CompanyContext = React.createContext<CompanyContextType>({
     addCompany: () => {},
 });
 
+// Create a context for managing page permissions
+export const PermissionContext = React.createContext<{
+  permissions: Permissions;
+  updatePermission: (role: Role, page: Page, value: boolean) => void;
+}>({
+  permissions: DEFAULT_PAGE_PERMISSIONS,
+  updatePermission: () => {},
+});
+
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [calls, setCalls] = useState<MaintenanceCall[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [permissions, setPermissions] = useState<Permissions>(DEFAULT_PAGE_PERMISSIONS);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -78,11 +91,20 @@ function App() {
             setCompanies(MOCK_COMPANIES);
             localStorage.setItem('pcm_companies', JSON.stringify(MOCK_COMPANIES));
         }
+        
+        const localPermissions = localStorage.getItem('pcm_page_permissions');
+        if (localPermissions) {
+            setPermissions(JSON.parse(localPermissions));
+        } else {
+            setPermissions(DEFAULT_PAGE_PERMISSIONS);
+            localStorage.setItem('pcm_page_permissions', JSON.stringify(DEFAULT_PAGE_PERMISSIONS));
+        }
 
     } catch (error) {
         console.error("Failed to load or parse local data:", error);
         setCalls(MOCK_MAINTENANCE_CALLS); // Fallback to mocks
         setCompanies(MOCK_COMPANIES);
+        setPermissions(DEFAULT_PAGE_PERMISSIONS);
     } finally {
         setIsLoadingData(false);
     }
@@ -128,6 +150,22 @@ function App() {
     });
   }, []);
 
+  const addCall = useCallback((newCallData: Omit<MaintenanceCall, 'id'>) => {
+    setCalls(prevCalls => {
+        const newCall: MaintenanceCall = {
+            ...newCallData,
+            id: Date.now(),
+        };
+        const newCalls = [...prevCalls, newCall];
+        try {
+            localStorage.setItem('pcm_maintenance_calls', JSON.stringify(newCalls));
+        } catch (error) {
+            console.error("Failed to save new call locally:", error);
+        }
+        return newCalls;
+    });
+}, []);
+
   const addCompany = useCallback((newCompany: Company) => {
     setCompanies(prev => {
         const newCompanies = [...prev, newCompany];
@@ -139,11 +177,30 @@ function App() {
         return newCompanies;
     });
   }, []);
+  
+  const updatePermission = useCallback((role: Role, page: Page, value: boolean) => {
+    setPermissions(prev => {
+        const newPermissions = {
+            ...prev,
+            [role]: {
+                ...prev[role],
+                [page]: value,
+            }
+        };
+        try {
+            localStorage.setItem('pcm_page_permissions', JSON.stringify(newPermissions));
+        } catch (error) {
+            console.error("Failed to save permissions locally:", error);
+        }
+        return newPermissions;
+    });
+  }, []);
 
   const authContextValue = useMemo(() => ({ user, logout: handleLogout, isOnline }), [user, handleLogout, isOnline]);
   const notificationContextValue = useMemo(() => ({ notifications, addNotification, markAsRead }), [notifications, addNotification, markAsRead]);
-  const dataContextValue = useMemo(() => ({ calls, updateCall, isLoading: isLoadingData }), [calls, updateCall, isLoadingData]);
+  const dataContextValue = useMemo(() => ({ calls, updateCall, addCall, isLoading: isLoadingData }), [calls, updateCall, addCall, isLoadingData]);
   const companyContextValue = useMemo(() => ({ companies, addCompany }), [companies, addCompany]);
+  const permissionContextValue = useMemo(() => ({ permissions, updatePermission }), [permissions, updatePermission]);
 
   if (!user) {
     return <LoginPage onLogin={handleLogin} />;
@@ -154,8 +211,9 @@ function App() {
       <NotificationContext.Provider value={notificationContextValue}>
         <DataContext.Provider value={dataContextValue}>
           <CompanyContext.Provider value={companyContextValue}>
-            <AppLayout />
-            {/* FIX: Corrected typo in closing tag from Company-context.Provider to CompanyContext.Provider */}
+            <PermissionContext.Provider value={permissionContextValue}>
+              <AppLayout />
+            </PermissionContext.Provider>
           </CompanyContext.Provider>
         </DataContext.Provider>
       </NotificationContext.Provider>

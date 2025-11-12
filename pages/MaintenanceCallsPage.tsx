@@ -2,7 +2,7 @@
 
 import React, { useContext, useMemo, useState } from 'react';
 import { AuthContext, DataContext, NotificationContext } from '../App';
-import { Role, CallSource, MaintenanceStatus, User, MaintenanceCall, MaintenanceCallEvent } from '../types';
+import { Role, CallSource, MaintenanceStatus, User, MaintenanceCall, MaintenanceCallEvent, MaintenancePriority, Equipment } from '../types';
 import { MOCK_EQUIPMENT, MOCK_PLANTS, MOCK_USERS } from '../constants';
 import { StatusBadge, PriorityBadge } from '../components/ui/Badge';
 
@@ -27,15 +27,16 @@ const calculateDuration = (start: string, end: string) => {
 
 const MaintenanceCallsPage: React.FC = () => {
   const { user } = useContext(AuthContext);
-  const { calls, updateCall } = useContext(DataContext);
+  const { calls, updateCall, addCall } = useContext(DataContext);
   const { addNotification } = useContext(NotificationContext);
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [selectedCallToAssign, setSelectedCallToAssign] = useState<MaintenanceCall | null>(null);
-  const [selectedTechnicianId, setSelectedTechnicianId] = useState<string>('');
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [selectedCall, setSelectedCall] = useState<MaintenanceCall | null>(null);
   
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [selectedCallForDetails, setSelectedCallForDetails] = useState<MaintenanceCall | null>(null);
+  
+  const [isNewCallModalOpen, setIsNewCallModalOpen] = useState(false);
 
 
   const filteredData = useMemo(() => {
@@ -58,11 +59,11 @@ const MaintenanceCallsPage: React.FC = () => {
   }, [user, calls]);
 
   const techniciansForModal = useMemo(() => {
-    if (!user || !selectedCallToAssign) return [];
+    if (!user || !selectedCall) return [];
     
     const allTechnicians = MOCK_USERS.filter(u => u.role === Role.TECNICO_PCM);
     
-    const callPlant = MOCK_PLANTS.find(p => p.id === selectedCallToAssign.plantId);
+    const callPlant = MOCK_PLANTS.find(p => p.id === selectedCall.plantId);
     if (!callPlant) return [];
 
     // System admin sees techs from the call's company
@@ -72,44 +73,73 @@ const MaintenanceCallsPage: React.FC = () => {
     
     // Other roles see techs from their own company
     return allTechnicians.filter(t => t.companyId === user.companyId);
-  }, [user, selectedCallToAssign]);
+  }, [user, selectedCall]);
 
   const handleOpenAssignModal = (call: MaintenanceCall) => {
-    setSelectedCallToAssign(call);
-    setSelectedTechnicianId(''); // Reset selection
+    setSelectedCall(call);
     setIsAssignModalOpen(true);
   };
   
-  const handleCloseAssignModal = () => {
-    setIsAssignModalOpen(false);
-    setSelectedCallToAssign(null);
+  const handleOpenTransferModal = (call: MaintenanceCall) => {
+    setSelectedCall(call);
+    setIsTransferModalOpen(true);
   };
-  
+
   const handleOpenDetailsModal = (call: MaintenanceCall) => {
-    setSelectedCallForDetails(call);
+    setSelectedCall(call);
     setIsDetailsModalOpen(true);
   };
 
-  const handleCloseDetailsModal = () => {
+  const handleCloseModals = () => {
+    setIsAssignModalOpen(false);
+    setIsTransferModalOpen(false);
     setIsDetailsModalOpen(false);
-    setSelectedCallForDetails(null);
+    setSelectedCall(null);
+  };
+  
+  const handleSaveNewCall = (newCallData: Omit<MaintenanceCall, 'id' | 'plantId' | 'status' | 'requesterId' | 'source' | 'openedAt' | 'events'> & { equipmentId: number }) => {
+    if (!user) return;
+    const now = new Date().toISOString();
+    const equipment = MOCK_EQUIPMENT.find(e => e.id === newCallData.equipmentId);
+    if (!equipment) return;
+
+    const newCall: Omit<MaintenanceCall, 'id'> = {
+        ...newCallData,
+        plantId: equipment.plantId,
+        status: MaintenanceStatus.ABERTO,
+        requesterId: user.id,
+        source: CallSource.MANUAL,
+        openedAt: now,
+        events: [{
+            status: MaintenanceStatus.ABERTO,
+            timestamp: now,
+            userId: user.id,
+            notes: 'Chamado aberto manualmente.'
+        }]
+    };
+    addCall(newCall);
+    addNotification({
+        message: `Novo chamado para ${equipment.name} foi aberto.`,
+        callId: 0, // ID will be assigned in App.tsx
+    });
+    setIsNewCallModalOpen(false);
   };
 
-  const handleConfirmAssignment = () => {
-    if (!selectedCallToAssign || !selectedTechnicianId || !user) return;
+  const handleConfirmAssignment = (technicianId: string) => {
+    if (!selectedCall || !technicianId || !user) return;
 
-    const technician = MOCK_USERS.find(u => u.id === parseInt(selectedTechnicianId));
+    const technician = MOCK_USERS.find(u => u.id === parseInt(technicianId));
     if (!technician) return;
 
     const now = new Date().toISOString();
     
     const updatedCall = {
-        ...selectedCallToAssign,
+        ...selectedCall,
         status: MaintenanceStatus.EM_ANDAMENTO,
         responsible: technician,
         assignedAt: now,
         events: [
-            ...selectedCallToAssign.events,
+            ...selectedCall.events,
             {
                 status: MaintenanceStatus.EM_ANDAMENTO,
                 timestamp: now,
@@ -124,7 +154,39 @@ const MaintenanceCallsPage: React.FC = () => {
         message: `Chamado #${updatedCall.id} atribuído para ${technician.name}.`,
         callId: updatedCall.id,
     });
-    handleCloseAssignModal();
+    handleCloseModals();
+  };
+  
+  const handleConfirmTransfer = (technicianId: string, reason: string) => {
+    if (!selectedCall || !technicianId || !reason || !user) return;
+    
+    const newTechnician = MOCK_USERS.find(u => u.id === parseInt(technicianId));
+    if (!newTechnician) return;
+    
+    const now = new Date().toISOString();
+    const oldTechnicianName = selectedCall.responsible?.name || 'N/A';
+    
+    const updatedCall = {
+      ...selectedCall,
+      responsible: newTechnician,
+      assignedAt: now, // Reset assignment time
+      events: [
+        ...selectedCall.events,
+        {
+          status: MaintenanceStatus.EM_ANDAMENTO,
+          timestamp: now,
+          userId: user.id,
+          notes: `Transferido de ${oldTechnicianName} para ${newTechnician.name}. Motivo: ${reason}`
+        }
+      ]
+    };
+    
+    updateCall(updatedCall);
+    addNotification({
+        message: `Chamado #${updatedCall.id} foi transferido para ${newTechnician.name}.`,
+        callId: updatedCall.id,
+    });
+    handleCloseModals();
   };
 
   const handleAction = (callId: number, action: 'resolve' | 'approve' | 'reject') => {
@@ -184,7 +246,12 @@ const MaintenanceCallsPage: React.FC = () => {
             break;
         case MaintenanceStatus.EM_ANDAMENTO:
             if(call.responsible?.id === user?.id) {
-               return <button onClick={() => handleAction(call.id, 'resolve')} className="text-sm font-semibold text-blue-500 hover:text-blue-600">Finalizar Reparo</button>;
+               return (
+                <div className="flex space-x-2">
+                   <button onClick={() => handleAction(call.id, 'resolve')} className="text-sm font-semibold text-blue-500 hover:text-blue-600">Finalizar</button>
+                   <button onClick={() => handleOpenTransferModal(call)} className="text-sm font-semibold text-orange-500 hover:text-orange-600">Transferir</button>
+                </div>
+              );
             }
             break;
         case MaintenanceStatus.AGUARDANDO_APROVACAO:
@@ -207,7 +274,7 @@ const MaintenanceCallsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Chamados de Manutenção</h1>
-        <button className="bg-primary-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center">
+        <button onClick={() => setIsNewCallModalOpen(true)} className="bg-primary-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center">
           <i className="fas fa-plus mr-2"></i>
           Novo Chamado
         </button>
@@ -261,53 +328,31 @@ const MaintenanceCallsPage: React.FC = () => {
           </table>
         </div>
       </div>
-      {isAssignModalOpen && selectedCallToAssign && (
-            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 transition-opacity duration-300">
-                <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4 transform transition-all duration-300 scale-100">
-                    <div className="flex justify-between items-center pb-3 border-b border-neutral-200 dark:border-neutral-700">
-                         <h2 className="text-xl font-bold">Atribuir Chamado #{selectedCallToAssign.id}</h2>
-                         <button onClick={handleCloseAssignModal} className="text-2xl text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">&times;</button>
-                    </div>
-                    <div className="space-y-4 mt-4">
-                        <div>
-                            <label htmlFor="technician" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                                Selecione o Técnico
-                            </label>
-                            <select
-                                id="technician"
-                                value={selectedTechnicianId}
-                                onChange={(e) => setSelectedTechnicianId(e.target.value)}
-                                className="w-full p-2 border rounded-md bg-neutral-50 dark:bg-neutral-700 border-neutral-300 dark:border-neutral-600 focus:ring-primary-500 focus:border-primary-500"
-                            >
-                                <option value="" disabled>-- Selecione um técnico --</option>
-                                {techniciansForModal.map(tech => (
-                                    <option key={tech.id} value={tech.id}>{tech.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                    <div className="mt-6 flex justify-end space-x-3">
-                        <button
-                            type="button"
-                            onClick={handleCloseAssignModal}
-                            className="px-4 py-2 bg-neutral-200 dark:bg-neutral-600 text-neutral-800 dark:text-neutral-200 rounded-md hover:bg-neutral-300 dark:hover:bg-neutral-500 transition-colors"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleConfirmAssignment}
-                            disabled={!selectedTechnicianId}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:bg-primary-800 disabled:cursor-not-allowed transition-colors"
-                        >
-                            Atribuir
-                        </button>
-                    </div>
-                </div>
-            </div>
+      {isNewCallModalOpen && (
+        <NewCallModal 
+            onClose={() => setIsNewCallModalOpen(false)}
+            onSave={handleSaveNewCall}
+            equipmentList={filteredData.equipment}
+        />
+      )}
+      {isAssignModalOpen && selectedCall && (
+            <AssignModal
+                call={selectedCall}
+                technicians={techniciansForModal}
+                onClose={handleCloseModals}
+                onConfirm={handleConfirmAssignment}
+            />
         )}
-        {isDetailsModalOpen && selectedCallForDetails && (() => {
-            const sortedEvents = selectedCallForDetails.events.slice().sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      {isTransferModalOpen && selectedCall && (
+            <TransferModal
+                call={selectedCall}
+                technicians={techniciansForModal.filter(t => t.id !== selectedCall.responsible?.id)}
+                onClose={handleCloseModals}
+                onConfirm={handleConfirmTransfer}
+            />
+        )}
+      {isDetailsModalOpen && selectedCall && (() => {
+            const sortedEvents = selectedCall.events.slice().sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             const lastEvent = sortedEvents[sortedEvents.length - 1];
             const isClosed = lastEvent.status === MaintenanceStatus.ENCERRADO || lastEvent.status === MaintenanceStatus.CANCELADO;
             const totalDuration = calculateDuration(
@@ -319,8 +364,8 @@ const MaintenanceCallsPage: React.FC = () => {
                  <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 transition-opacity duration-300">
                     <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl p-6 w-full max-w-lg m-4 transform transition-all duration-300 scale-100 max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center pb-3 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
-                            <h2 className="text-xl font-bold">Linha do Tempo - Chamado #{selectedCallForDetails.id}</h2>
-                            <button onClick={handleCloseDetailsModal} className="text-2xl text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">&times;</button>
+                            <h2 className="text-xl font-bold">Linha do Tempo - Chamado #{selectedCall.id}</h2>
+                            <button onClick={handleCloseModals} className="text-2xl text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">&times;</button>
                         </div>
                         <div className="mt-4 space-y-2 overflow-y-auto pr-2 flex-grow">
                              {sortedEvents.map((event, index) => {
@@ -363,6 +408,122 @@ const MaintenanceCallsPage: React.FC = () => {
         })()}
     </div>
   );
+};
+
+// --- Modals ---
+
+const AssignModal: React.FC<{call: MaintenanceCall; technicians: User[]; onClose: () => void; onConfirm: (techId: string) => void;}> = ({ call, technicians, onClose, onConfirm }) => {
+    const [selectedTechnicianId, setSelectedTechnicianId] = useState<string>('');
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+                <div className="flex justify-between items-center pb-3 border-b border-neutral-200 dark:border-neutral-700">
+                    <h2 className="text-xl font-bold">Atribuir Chamado #{call.id}</h2>
+                    <button onClick={onClose} className="text-2xl text-neutral-500">&times;</button>
+                </div>
+                <div className="mt-4">
+                    <label htmlFor="technician" className="block text-sm font-medium mb-1">Selecione o Técnico</label>
+                    <select id="technician" value={selectedTechnicianId} onChange={(e) => setSelectedTechnicianId(e.target.value)} className="w-full p-2 border rounded-md bg-neutral-50 dark:bg-neutral-700">
+                        <option value="" disabled>-- Selecione --</option>
+                        {technicians.map(tech => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
+                    </select>
+                </div>
+                <div className="mt-6 flex justify-end space-x-3">
+                    <button onClick={onClose} className="px-4 py-2 bg-neutral-200 dark:bg-neutral-600 rounded-md">Cancelar</button>
+                    <button onClick={() => onConfirm(selectedTechnicianId)} disabled={!selectedTechnicianId} className="px-4 py-2 bg-primary-600 text-white rounded-md disabled:bg-primary-800">Atribuir</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const TransferModal: React.FC<{call: MaintenanceCall; technicians: User[]; onClose: () => void; onConfirm: (techId: string, reason: string) => void;}> = ({ call, technicians, onClose, onConfirm }) => {
+    const [selectedTechnicianId, setSelectedTechnicianId] = useState<string>('');
+    const [reason, setReason] = useState('');
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+                <div className="flex justify-between items-center pb-3 border-b dark:border-neutral-700">
+                    <h2 className="text-xl font-bold">Transferir Chamado #{call.id}</h2>
+                    <button onClick={onClose} className="text-2xl text-neutral-500">&times;</button>
+                </div>
+                <div className="mt-4 space-y-4">
+                    <div>
+                        <label htmlFor="newTechnician" className="block text-sm font-medium mb-1">Transferir para</label>
+                        <select id="newTechnician" value={selectedTechnicianId} onChange={(e) => setSelectedTechnicianId(e.target.value)} className="w-full p-2 border rounded-md bg-neutral-50 dark:bg-neutral-700">
+                            <option value="" disabled>-- Selecione --</option>
+                            {technicians.map(tech => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label htmlFor="reason" className="block text-sm font-medium mb-1">Motivo da Transferência</label>
+                        <textarea id="reason" value={reason} onChange={e => setReason(e.target.value)} rows={3} className="w-full p-2 border rounded-md bg-neutral-50 dark:bg-neutral-700" />
+                    </div>
+                </div>
+                <div className="mt-6 flex justify-end space-x-3">
+                    <button onClick={onClose} className="px-4 py-2 bg-neutral-200 dark:bg-neutral-600 rounded-md">Cancelar</button>
+                    <button onClick={() => onConfirm(selectedTechnicianId, reason)} disabled={!selectedTechnicianId || !reason.trim()} className="px-4 py-2 bg-primary-600 text-white rounded-md disabled:bg-primary-800">Confirmar Transferência</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NewCallModal: React.FC<{onClose: () => void; onSave: (data: any) => void; equipmentList: Equipment[];}> = ({ onClose, onSave, equipmentList }) => {
+    const [callData, setCallData] = useState({
+        equipmentId: '',
+        priority: MaintenancePriority.BAIXO,
+        description: '',
+        problemType: ''
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave({ ...callData, equipmentId: parseInt(callData.equipmentId) });
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setCallData(prev => ({ ...prev, [name]: value }));
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl p-6 w-full max-w-lg m-4">
+                 <div className="flex justify-between items-center pb-3 border-b border-neutral-200 dark:border-neutral-700">
+                    <h2 className="text-xl font-bold">Abrir Novo Chamado</h2>
+                    <button onClick={onClose} className="text-2xl text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">&times;</button>
+                </div>
+                 <form onSubmit={handleSubmit} className="mt-4 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                    <div>
+                        <label htmlFor="equipmentId" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Equipamento</label>
+                        <select id="equipmentId" name="equipmentId" value={callData.equipmentId} onChange={handleChange} required className="w-full p-2 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                           <option value="" disabled>Selecione um equipamento</option>
+                           {equipmentList.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="priority" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Prioridade</label>
+                        <select id="priority" name="priority" value={callData.priority} onChange={handleChange} className="w-full p-2 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                            {Object.values(MaintenancePriority).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label htmlFor="problemType" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Tipo de Problema</label>
+                        <input id="problemType" name="problemType" type="text" value={callData.problemType} onChange={handleChange} required placeholder="Ex: Falha Mecânica, Superaquecimento" className="w-full p-2 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-md focus:ring-primary-500 focus:border-primary-500" />
+                    </div>
+                     <div>
+                        <label htmlFor="description" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Descrição Detalhada do Problema</label>
+                        <textarea id="description" name="description" value={callData.description} onChange={handleChange} rows={4} required className="w-full p-2 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-md focus:ring-primary-500 focus:border-primary-500" />
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-neutral-200 dark:bg-neutral-600 text-neutral-800 dark:text-neutral-200 rounded-md hover:bg-neutral-300 dark:hover:bg-neutral-500">Cancelar</button>
+                        <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700">Abrir Chamado</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
 };
 
 export default MaintenanceCallsPage;

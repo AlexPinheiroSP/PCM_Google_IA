@@ -124,15 +124,21 @@ export enum AlertMetric {
 export enum AlertCondition {
     GREATER_THAN = 'Maior que',
     LESS_THAN = 'Menor que',
+    EQUAL_TO = 'Igual a',
+    NOT_EQUAL_TO = 'Diferente de',
+    OUTSIDE_RANGE = 'Fora do intervalo',
 }
+
 
 export interface AlertRule {
     id: number;
     equipmentId: number;
-    metric: AlertMetric;
-    condition: AlertCondition;
+    metric: AlertMetric | string;
+    condition: AlertCondition | string;
     threshold: number;
+    thresholdUpper?: number;
     description: string;
+    isActive: boolean;
 }
 
 export interface Notification {
@@ -141,6 +147,14 @@ export interface Notification {
   read: boolean;
   callId: number;
 }
+
+export type Page = 'analysis' | 'calls' | 'equipment' | 'users' | 'settings' | 'ai' | 'team-view' | 'alerts' | 'database' | 'messaging' | 'companies' | 'schema' | 'teams' | 'roles' | 'reports' | 'access-control';
+
+export type Permissions = {
+  [key in Role]: {
+    [key in Page]?: boolean;
+  };
+};
 
 // Context Types
 export interface CompanyContextType {

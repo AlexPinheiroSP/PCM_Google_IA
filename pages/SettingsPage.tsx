@@ -1,7 +1,14 @@
 
-import React from 'react';
 
-const SettingsPage: React.FC = () => {
+import React from 'react';
+// FIX: The 'Page' type is exported from '../types', not '../components/layout/AppLayout'.
+import { Page } from '../types';
+
+interface SettingsPageProps {
+  setCurrentPage: (page: Page) => void;
+}
+
+const SettingsPage: React.FC<SettingsPageProps> = ({ setCurrentPage }) => {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Parâmetros do Sistema</h1>
@@ -14,7 +21,9 @@ const SettingsPage: React.FC = () => {
             <h3 className="text-lg font-semibold">Configurações de Regras Inteligentes</h3>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Exemplo: "Se equipamento X tiver 3 paradas críticas em 7 dias → enviar alerta e abrir chamado automático"</p>
             <div className="mt-4">
-                <button className="bg-primary-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors">
+                <button 
+                    onClick={() => setCurrentPage('alerts')}
+                    className="bg-primary-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors">
                     Gerenciar Regras
                 </button>
             </div>
@@ -25,4 +34,3 @@ const SettingsPage: React.FC = () => {
 };
 
 export default SettingsPage;
-   

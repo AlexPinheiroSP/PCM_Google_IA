@@ -5,7 +5,7 @@ import { Role, MaintenanceStatus, MaintenancePriority, Equipment, MaintenanceCal
 import { MOCK_EQUIPMENT, MOCK_PLANTS, MOCK_USERS } from '../constants';
 import { StatusBadge } from '../components/ui/Badge';
 
-type DashboardView = 'overview' | 'downtime' | 'process' | 'team' | 'financial' | 'reliability' | 'strategy' | 'maintainer';
+type DashboardView = 'overview' | 'downtime' | 'team' | 'reliability' | 'strategy' | 'maintainer';
 
 const hoursBetween = (d1: string, d2: string) => {
     if (!d1 || !d2) return 0;
@@ -34,27 +34,59 @@ const ChartContainer: React.FC<{ title: string; children: React.ReactNode }> = (
 );
 
 // --- Dashboard Views ---
-const OverviewDashboard: React.FC<{ data: any }> = ({ data }) => (
-    <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <KpiCard title="Chamados Abertos" value={data.openCallsCount.toString()} icon="fa-wrench" iconColor="text-blue-500" />
-            <KpiCard title="Chamados Críticos" value={data.criticalCallsCount.toString()} icon="fa-triangle-exclamation" iconColor="text-red-500" />
-            <KpiCard title="SLA Atingido (%)" value={`${data.slaMetPercent.toFixed(1)}%`} icon="fa-check-circle" iconColor="text-green-500" />
-            <KpiCard title="Tempo Médio de Resposta" value={data.avgAssignment} icon="fa-clock" iconColor="text-yellow-500" />
+const OverviewDashboard: React.FC<{ data: any }> = ({ data }) => {
+    const PRIORITY_COLORS = {
+        [MaintenancePriority.CRITICO]: '#ef4444',
+        [MaintenancePriority.ALTO]: '#f97316',
+        [MaintenancePriority.MEDIO]: '#f59e0b',
+        [MaintenancePriority.BAIXO]: '#22c55e',
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <KpiCard title="Chamados Abertos" value={data.openCallsCount.toString()} icon="fa-wrench" iconColor="text-blue-500" />
+                <KpiCard title="Chamados Críticos" value={data.criticalCallsCount.toString()} icon="fa-triangle-exclamation" iconColor="text-red-500" />
+                <KpiCard title="SLA Atingido (%)" value={`${data.slaMetPercent.toFixed(1)}%`} icon="fa-check-circle" iconColor="text-green-500" />
+                <KpiCard title="Tempo Médio de Resposta" value={data.avgAssignment} icon="fa-clock" iconColor="text-yellow-500" />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ChartContainer title="Maiores Problemas (Causa Raiz)">
+                    <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={data.problemTypes} layout="vertical" margin={{ left: 20, right: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(128,128,128,0.2)" />
+                            <XAxis type="number" stroke="currentColor"/>
+                            <YAxis type="category" dataKey="name" width={100} stroke="currentColor" />
+                            <Tooltip contentStyle={{ backgroundColor: 'rgba(30,30,30,0.8)', border: 'none' }}/>
+                            <Bar dataKey="value" name="Chamados" fill="#3b82f6" barSize={20} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </ChartContainer>
+                <ChartContainer title="Chamados por Prioridade">
+                     <ResponsiveContainer width="100%" height={250}>
+                        <PieChart>
+                            <Pie
+                                data={data.priorityDistribution}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) => `${name}: ${((typeof percent === 'number' ? percent : 0) * 100).toFixed(0)}%`}
+                                outerRadius={80}
+                                fill="#8884d8"
+                                dataKey="value"
+                            >
+                                {data.priorityDistribution.map((entry: any, index: number) => (
+                                    <Cell key={`cell-${index}`} fill={PRIORITY_COLORS[entry.name as MaintenancePriority]} />
+                                ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ backgroundColor: 'rgba(30,30,30,0.8)', border: 'none' }} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </ChartContainer>
+            </div>
         </div>
-        <ChartContainer title="Maiores Problemas (Causa Raiz)">
-            <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={data.problemTypes} layout="vertical" margin={{ left: 20, right: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(128,128,128,0.2)" />
-                    <XAxis type="number" stroke="currentColor"/>
-                    <YAxis type="category" dataKey="name" width={100} stroke="currentColor" />
-                    <Tooltip contentStyle={{ backgroundColor: 'rgba(30,30,30,0.8)', border: 'none' }}/>
-                    <Bar dataKey="value" name="Chamados" fill="#3b82f6" barSize={20} />
-                </BarChart>
-            </ResponsiveContainer>
-        </ChartContainer>
-    </div>
-);
+    );
+};
 
 const DowntimeDashboard: React.FC<{ data: any }> = ({ data }) => (
     <ChartContainer title="Downtime por Equipamento (Horas)">
@@ -68,26 +100,6 @@ const DowntimeDashboard: React.FC<{ data: any }> = ({ data }) => (
             </BarChart>
         </ResponsiveContainer>
     </ChartContainer>
-);
-
-const FinancialDashboard: React.FC<{ data: any }> = ({ data }) => (
-     <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <KpiCard title="Downtime Total" value={`${data.totalDowntime.toFixed(1)}h`} icon="fa-clock" iconColor="text-red-500" />
-            <KpiCard title="Custo de Parada (Est.)" value={`R$ ${data.downtimeCost.toLocaleString('pt-BR')}`} icon="fa-dollar-sign" iconColor="text-yellow-500" subtitle="*Custo/hora estimado: R$1.500" />
-        </div>
-        <ChartContainer title="Custo de Downtime por Equipamento">
-             <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={data.costByEquipment} layout="vertical" margin={{ left: 20, right: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(128,128,128,0.2)" />
-                    <XAxis type="number" stroke="currentColor" tickFormatter={(value) => `R$${(Number(value)/1000)}k`}/>
-                    <YAxis type="category" dataKey="name" width={120} stroke="currentColor" />
-                    <Tooltip contentStyle={{ backgroundColor: 'rgba(30,30,30,0.8)', border: 'none' }} formatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR')}`}/>
-                    <Bar dataKey="cost" name="Custo de Parada" fill="#f59e0b" barSize={20} />
-                </BarChart>
-            </ResponsiveContainer>
-        </ChartContainer>
-    </div>
 );
 
 const ReliabilityDashboard: React.FC<{ data: any }> = ({ data }) => (
@@ -117,8 +129,6 @@ const StrategyDashboard: React.FC<{ data: any }> = ({ data }) => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        // FIX: The 'percent' prop from recharts Pie can be undefined or unknown.
-                        // A type check ensures it's a number before calling toFixed().
                         label={({ name, percent }) => `${name}: ${((typeof percent === 'number' ? percent : 0) * 100).toFixed(0)}%`}
                         outerRadius={100}
                         fill="#8884d8"
@@ -135,58 +145,6 @@ const StrategyDashboard: React.FC<{ data: any }> = ({ data }) => {
         </ChartContainer>
     )
 };
-
-const ProcessDashboard: React.FC<{ data: any, equipment: any[] }> = ({ data, equipment }) => (
-    <div className="space-y-6">
-        <ChartContainer title="Gargalos no Processo (Tempo Médio por Etapa)">
-            <div className="flex justify-around items-center p-4 flex-wrap gap-4">
-              <div className="text-center">
-                <p className="text-xs text-neutral-500">Abertura → Atribuição</p>
-                <p className="text-3xl font-bold text-yellow-500">{data.avgAssignTime.toFixed(1)}h</p>
-              </div>
-              <i className="fas fa-arrow-right text-neutral-400 text-2xl hidden md:block"></i>
-               <div className="text-center">
-                <p className="text-xs text-neutral-500">Atribuição → Reparo</p>
-                <p className="text-3xl font-bold text-blue-500">{data.avgResolveTime.toFixed(1)}h</p>
-              </div>
-              <i className="fas fa-arrow-right text-neutral-400 text-2xl hidden md:block"></i>
-              <div className="text-center">
-                <p className="text-xs text-neutral-500">Reparo → Encerramento</p>
-                <p className="text-3xl font-bold text-green-500">{data.avgApproveTime.toFixed(1)}h</p>
-              </div>
-            </div>
-        </ChartContainer>
-        {data.staleCalls.length > 0 && (
-             <ChartContainer title="Chamados que Exigem Atenção">
-                 <div className="overflow-x-auto max-h-64">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-neutral-700 uppercase bg-neutral-50 dark:bg-neutral-700 dark:text-neutral-400 sticky top-0">
-                            <tr>
-                                <th className="px-4 py-2">ID</th>
-                                <th className="px-4 py-2">Equipamento</th>
-                                <th className="px-4 py-2">Status</th>
-                                <th className="px-4 py-2">Tempo no Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {data.staleCalls.map((c: MaintenanceCall & { timeInStatus: number }) => {
-                                const eq = equipment.find(e => e.id === c.equipmentId);
-                                return (
-                                    <tr key={c.id} className="border-b dark:border-neutral-700">
-                                        <td className="px-4 py-2 font-bold">#{c.id}</td>
-                                        <td className="px-4 py-2">{eq?.name}</td>
-                                        <td className="px-4 py-2"><StatusBadge status={c.status} /></td>
-                                        <td className="px-4 py-2 font-semibold text-red-500">{`${c.timeInStatus.toFixed(0)}h`}</td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-             </ChartContainer>
-        )}
-    </div>
-);
 
 const TeamDashboard: React.FC<{ data: any }> = ({ data }) => (
     <ChartContainer title="Performance por Mantenedor">
@@ -240,7 +198,8 @@ const MaintainerDashboard: React.FC<{ calls: MaintenanceCall[], equipment: Equip
     
     const kpiData = useMemo(() => {
         const totalCalls = filteredCalls.length;
-        const totalHours = filteredCalls.reduce((acc, call) => acc + hoursBetween(call.assignedAt || '', call.resolvedAt || ''), 0);
+        // FIX: Explicitly type the accumulator to ensure `totalHours` is a number.
+        const totalHours = filteredCalls.reduce((acc: number, call) => acc + hoursBetween(call.assignedAt || '', call.resolvedAt || ''), 0);
         const uniqueEquipment = new Set(filteredCalls.map(c => c.equipmentId)).size;
         
         return { totalCalls, totalHours, uniqueEquipment };
@@ -341,11 +300,25 @@ const AnalysisPage: React.FC = () => {
         const resolvedCalls = filteredData.calls.filter(c => c.resolvedAt);
         const slaMetCount = resolvedCalls.filter(c => hoursBetween(c.openedAt, c.resolvedAt!) <= 24).length;
         const slaMetPercent = resolvedCalls.length > 0 ? (slaMetCount / resolvedCalls.length) * 100 : 100;
+        
+        let totalAssign = 0;
+        const assignedCalls = filteredData.calls.filter(c => c.assignedAt);
+        if(assignedCalls.length > 0) {
+          assignedCalls.forEach(c => {
+             totalAssign += hoursBetween(c.openedAt, c.assignedAt!);
+          });
+        }
+        const avgAssignment = assignedCalls.length > 0 ? `${(totalAssign / assignedCalls.length).toFixed(1)}h` : 'N/A';
+        
+        const priorityCounts = filteredData.calls.reduce((acc, call) => {
+            acc[call.priority] = (acc[call.priority] || 0) + 1;
+            return acc;
+        }, {} as Record<MaintenancePriority, number>);
+        const priorityDistribution = Object.entries(priorityCounts).map(([name, value]) => ({ name, value }));
 
-        // --- Downtime / Financial ---
-        const DOWNTIME_COST_PER_HOUR = 1500;
+
+        // --- Downtime ---
         const callsWithDowntime = filteredData.calls.filter(c => c.resolvedAt);
-        const totalDowntime = callsWithDowntime.reduce((acc, call) => acc + hoursBetween(call.openedAt, call.resolvedAt!), 0);
         const downtimeByEquipment = callsWithDowntime.reduce<Record<string, number>>((acc, call) => {
             const eq = filteredData.equipment.find(e => e.id === call.equipmentId);
             const eqName = eq?.name || 'Desconhecido';
@@ -353,8 +326,6 @@ const AnalysisPage: React.FC = () => {
             return acc;
         }, {});
         const downtimeByEquipmentChart = Object.entries(downtimeByEquipment).map(([name, hours]) => ({ name, hours: parseFloat(hours.toFixed(1)) })).sort((a, b) => b.hours - a.hours);
-        const downtimeCost = totalDowntime * DOWNTIME_COST_PER_HOUR;
-        const costByEquipment = downtimeByEquipmentChart.map(item => ({ name: item.name, cost: item.hours * DOWNTIME_COST_PER_HOUR }));
 
         // --- Reliability ---
         const reliabilityData = filteredData.equipment.map(eq => ({
@@ -371,40 +342,9 @@ const AnalysisPage: React.FC = () => {
             { name: 'Corretiva', value: correctiveCount },
         ];
         
-        // --- Process ---
-        let totalAssign = 0, totalRepair = 0, totalApproval = 0;
-        const completedCalls = filteredData.calls.filter(c => c.openedAt && c.assignedAt && c.resolvedAt && c.closedAt);
-        if (completedCalls.length > 0) {
-            completedCalls.forEach(c => {
-                totalAssign += hoursBetween(c.openedAt, c.assignedAt!);
-                totalRepair += hoursBetween(c.assignedAt!, c.resolvedAt!);
-                totalApproval += hoursBetween(c.resolvedAt!, c.closedAt!);
-            });
-        }
-        const toHours = (total: number, count: number) => count > 0 ? `${(total / count).toFixed(1)}h` : 'N/A';
-        const avgAssignment = toHours(totalAssign, completedCalls.length);
-        const avgAssignTime = completedCalls.length > 0 ? totalAssign / completedCalls.length : 0;
-        const avgResolveTime = completedCalls.length > 0 ? totalRepair / completedCalls.length : 0;
-        const avgApproveTime = completedCalls.length > 0 ? totalApproval / completedCalls.length : 0;
-        const staleCalls = filteredData.calls.filter(call => {
-            if (call.status === MaintenanceStatus.ABERTO && hoursBetween(call.openedAt, new Date().toISOString()) > 24) return true;
-            if (call.status === MaintenanceStatus.EM_ANDAMENTO && call.assignedAt && hoursBetween(call.assignedAt, new Date().toISOString()) > 72) return true;
-            if (call.status === MaintenanceStatus.AGUARDANDO_APROVACAO && call.resolvedAt && hoursBetween(call.resolvedAt, new Date().toISOString()) > 48) return true;
-            return false;
-        }).map(c => {
-             let timeInStatus = 0;
-             if (c.status === MaintenanceStatus.ABERTO) timeInStatus = hoursBetween(c.openedAt, new Date().toISOString());
-             else if (c.status === MaintenanceStatus.EM_ANDAMENTO && c.assignedAt) timeInStatus = hoursBetween(c.assignedAt, new Date().toISOString());
-             else if (c.status === MaintenanceStatus.AGUARDANDO_APROVACAO && c.resolvedAt) timeInStatus = hoursBetween(c.resolvedAt, new Date().toISOString());
-             return {...c, timeInStatus};
-        });
-
         // --- Team ---
-        // FIX: By explicitly typing the accumulator for the reduce function, we ensure
-        // TypeScript correctly infers the type of `maintainerStats`. This resolves all subsequent
-        // cascading type errors related to spreading an unknown type, accessing its properties,
-        // and performing arithmetic operations.
-        const maintainerStats = filteredData.calls.reduce<Record<number, {name: string, count: number, totalTime: number}>>((acc, call) => {
+        // FIX: Provide a typed initial value to the reduce function to ensure correct type inference for `maintainerStats`.
+        const maintainerStats = filteredData.calls.reduce((acc, call) => {
             if (!call.responsible || !call.resolvedAt || !call.assignedAt) return acc;
             const techId = call.responsible.id;
             if (!acc[techId]) {
@@ -413,7 +353,7 @@ const AnalysisPage: React.FC = () => {
             acc[techId].count++;
             acc[techId].totalTime += hoursBetween(call.assignedAt, call.resolvedAt);
             return acc;
-        }, {});
+        }, {} as Record<number, {name: string, count: number, totalTime: number}>);
         const maintainerPerf = Object.values(maintainerStats).map(m => ({...m, avgTime: m.count > 0 ? `${(m.totalTime/m.count).toFixed(1)}h` : 'N/A' })).sort((a,b) => b.count - a.count);
 
         // --- Shared ---
@@ -424,12 +364,10 @@ const AnalysisPage: React.FC = () => {
         const problemTypes = Object.entries(problemCounts).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
         
         return {
-            overview: { openCallsCount, criticalCallsCount, slaMetPercent, avgAssignment, problemTypes },
+            overview: { openCallsCount, criticalCallsCount, slaMetPercent, avgAssignment, problemTypes, priorityDistribution },
             downtime: { downtimeByEquipmentChart },
-            financial: { totalDowntime, downtimeCost, costByEquipment },
             reliability: { reliabilityData },
             strategy: { strategyData },
-            process: { avgAssignTime, avgResolveTime, avgApproveTime, staleCalls },
             team: { maintainerPerf }
         };
     }, [filteredData]);
@@ -438,10 +376,8 @@ const AnalysisPage: React.FC = () => {
         switch(currentView) {
             case 'overview': return <OverviewDashboard data={analytics.overview} />;
             case 'downtime': return <DowntimeDashboard data={analytics.downtime} />;
-            case 'financial': return <FinancialDashboard data={analytics.financial} />;
             case 'reliability': return <ReliabilityDashboard data={analytics.reliability} />;
             case 'strategy': return <StrategyDashboard data={analytics.strategy} />;
-            case 'process': return <ProcessDashboard data={analytics.process} equipment={filteredData.equipment} />;
             case 'team': return <TeamDashboard data={analytics.team} />;
             case 'maintainer': return <MaintainerDashboard calls={filteredData.calls} equipment={filteredData.equipment} user={user} />;
             default: return null;
@@ -464,12 +400,10 @@ const AnalysisPage: React.FC = () => {
                 <div className="bg-white dark:bg-neutral-800 p-4 rounded-lg shadow-md border border-neutral-200 dark:border-neutral-700 space-y-2">
                     <h2 className="text-lg font-bold px-3 pb-2">Dashboards</h2>
                     <NavButton view="overview" icon="fa-tachometer-alt" label="Visão Geral" />
-                    <NavButton view="financial" icon="fa-dollar-sign" label="Análise Financeira" />
                     <NavButton view="reliability" icon="fa-shield-alt" label="Confiabilidade" />
                     <NavButton view="strategy" icon="fa-chess-board" label="Estratégia" />
                      <div className="my-2 border-t border-neutral-200 dark:border-neutral-700"></div>
                     <NavButton view="downtime" icon="fa-clock" label="Downtime" />
-                    <NavButton view="process" icon="fa-project-diagram" label="Processo" />
                     <NavButton view="team" icon="fa-users-cog" label="Equipe" />
                     <NavButton view="maintainer" icon="fa-user-gear" label="Desempenho Individual" />
                 </div>

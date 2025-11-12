@@ -1,10 +1,10 @@
 import React, { useContext } from 'react';
-import { AuthContext } from '../../App';
-import { Role } from '../../types';
+import { AuthContext, PermissionContext } from '../../App';
+import { Role, Page } from '../../types';
 
 interface SidebarProps {
   currentPage: string;
-  setCurrentPage: (page: 'analysis' | 'calls' | 'equipment' | 'users' | 'settings' | 'ai' | 'team-view' | 'alerts' | 'database' | 'messaging' | 'companies' | 'schema') => void;
+  setCurrentPage: (page: Page) => void;
 }
 
 const NavLink: React.FC<{
@@ -28,9 +28,47 @@ const NavLink: React.FC<{
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
   const { user } = useContext(AuthContext);
-  
-  const canViewAdminFeatures = user?.role === Role.ADMINISTRATOR || user?.role === Role.ADMIN_PLANTA || user?.role === Role.SYSTEM_ADMINISTRATOR;
-  const canViewSystemSettings = user?.role === Role.SYSTEM_ADMINISTRATOR;
+  const { permissions } = useContext(PermissionContext);
+
+  if (!user) return null;
+
+  const userPermissions = permissions[user.role] || {};
+
+  const navItems: { page: Page; icon: string; label: string; section?: string }[] = [
+    { page: 'analysis', icon: 'fa-chart-pie', label: 'Análises' },
+    { page: 'reports', icon: 'fa-file-alt', label: 'Relatórios' },
+    { page: 'calls', icon: 'fa-wrench', label: 'Chamados' },
+    { page: 'team-view', icon: 'fa-users-cog', label: 'Visão da Equipe' },
+    { page: 'equipment', icon: 'fa-robot', label: 'Equipamentos' },
+    { page: 'ai', icon: 'fa-brain', label: 'Sugestões IA' },
+    { page: 'users', icon: 'fa-users', label: 'Usuários', section: 'Admin' },
+    { page: 'teams', icon: 'fa-user-friends', label: 'Equipes', section: 'Admin' },
+    { page: 'roles', icon: 'fa-id-card', label: 'Perfis de Acesso', section: 'Admin' },
+    { page: 'companies', icon: 'fa-building', label: 'Empresas', section: 'Admin' },
+    { page: 'alerts', icon: 'fa-bell', label: 'Alertas', section: 'Admin' },
+    { page: 'settings', icon: 'fa-sliders-h', label: 'Parâmetros', section: 'Sistema' },
+    { page: 'access-control', icon: 'fa-user-shield', label: 'Controle de Acesso', section: 'Sistema' },
+    { page: 'messaging', icon: 'fa-comments', label: 'Mensageria', section: 'Sistema' },
+    { page: 'database', icon: 'fa-database', label: 'Conexão BD', section: 'Sistema' },
+    { page: 'schema', icon: 'fa-file-code', label: 'Schema do Banco', section: 'Sistema' },
+  ];
+
+  const renderNavLinks = (section?: string) => {
+    return navItems
+      .filter(item => item.section === section && userPermissions[item.page])
+      .map(item => (
+        <NavLink
+          key={item.page}
+          icon={item.icon}
+          label={item.label}
+          isActive={currentPage === item.page}
+          onClick={() => setCurrentPage(item.page)}
+        />
+      ));
+  };
+
+  const adminLinks = renderNavLinks('Admin');
+  const systemLinks = renderNavLinks('Sistema');
 
   return (
     <div className="w-64 bg-neutral-900 dark:bg-neutral-800 flex-shrink-0 flex flex-col">
@@ -38,92 +76,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
         <i className="fas fa-cogs text-primary-400 text-2xl"></i>
         <h1 className="text-xl font-bold text-white ml-3">PCM Industrial</h1>
       </div>
-      <nav className="flex-1 p-4">
-        {canViewAdminFeatures && (
-            <NavLink
-              icon="fa-chart-pie"
-              label="Análises"
-              isActive={currentPage === 'analysis'}
-              onClick={() => setCurrentPage('analysis')}
-            />
-        )}
-        <NavLink
-          icon="fa-wrench"
-          label="Chamados"
-          isActive={currentPage === 'calls'}
-          onClick={() => setCurrentPage('calls')}
-        />
-        <NavLink
-          icon="fa-users-cog"
-          label="Visão da Equipe"
-          isActive={currentPage === 'team-view'}
-          onClick={() => setCurrentPage('team-view')}
-        />
-        <NavLink
-          icon="fa-robot"
-          label="Equipamentos"
-          isActive={currentPage === 'equipment'}
-          onClick={() => setCurrentPage('equipment')}
-        />
-        <NavLink
-          icon="fa-brain"
-          label="Sugestões IA"
-          isActive={currentPage === 'ai'}
-          onClick={() => setCurrentPage('ai')}
-        />
-        {canViewAdminFeatures && (
+      <nav className="flex-1 p-4 overflow-y-auto">
+        {renderNavLinks(undefined)}
+        
+        {adminLinks.length > 0 && (
           <>
             <div className="my-4 border-t border-neutral-700"></div>
-            <NavLink
-              icon="fa-users"
-              label="Usuários"
-              isActive={currentPage === 'users'}
-              onClick={() => setCurrentPage('users')}
-            />
-             {canViewSystemSettings && (
-                 <NavLink
-                  icon="fa-building"
-                  label="Empresas"
-                  isActive={currentPage === 'companies'}
-                  onClick={() => setCurrentPage('companies')}
-                />
-            )}
-            <NavLink
-              icon="fa-bell"
-              label="Alertas"
-              isActive={currentPage === 'alerts'}
-              onClick={() => setCurrentPage('alerts')}
-            />
+            {adminLinks}
           </>
         )}
-        {canViewSystemSettings && (
+        
+        {systemLinks.length > 0 && (
           <>
              <div className="my-4 border-t border-neutral-700"></div>
              <h3 className="px-3 text-xs font-semibold uppercase text-neutral-500 tracking-wider">Sistema</h3>
-             <NavLink
-              icon="fa-sliders-h"
-              label="Parâmetros"
-              isActive={currentPage === 'settings'}
-              onClick={() => setCurrentPage('settings')}
-            />
-            <NavLink
-              icon="fa-comments"
-              label="Mensageria"
-              isActive={currentPage === 'messaging'}
-              onClick={() => setCurrentPage('messaging')}
-            />
-            <NavLink
-              icon="fa-database"
-              label="Conexão BD"
-              isActive={currentPage === 'database'}
-              onClick={() => setCurrentPage('database')}
-            />
-             <NavLink
-              icon="fa-file-code"
-              label="Schema do Banco"
-              isActive={currentPage === 'schema'}
-              onClick={() => setCurrentPage('schema')}
-            />
+             {systemLinks}
           </>
         )}
       </nav>
